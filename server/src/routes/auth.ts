@@ -3,6 +3,7 @@ import { body, validationResult } from "express-validator";
 import User from "../models/user";
 import bcrypt from "bcryptjs";
 import JWT from "jsonwebtoken";
+import { checkAuth } from "../middleware/checkAuth";
 
 const router = express.Router();
 
@@ -52,7 +53,6 @@ router.post(
     // HASH PASSWORD
     const hashedPassword = await bcrypt.hash(password, 10);
 
-
     // SAVE USER TO DB
     const newUser = await User.create({
       username,
@@ -62,12 +62,12 @@ router.post(
 
     // CREATE AND SEND TOKEN
     const token = await JWT.sign(
-      {email: newUser.email},
+      { email: newUser.email },
       process.env.JWT_SECRET as string,
       {
-        expiresIn: 360000
+        expiresIn: 360000,
       }
-    )
+    );
 
     // SEND THE TOKEN
     res.json({
@@ -76,38 +76,36 @@ router.post(
         token,
         user: {
           id: newUser._id,
-          email: newUser.email
-        }
+          email: newUser.email,
+        },
       },
       msg: "Registration successful",
     });
-
-    
   }
 );
 
-
-// ---------------------- 
-// POST REQUEST FOR LOGIN 
+// ----------------------
+// POST REQUEST FOR LOGIN
 // -----------------------
 router.post("/login", async (req, res) => {
-  const {email, password} = req.body;
+  const { email, password } = req.body;
 
-  const user = await User.findOne({email})
+  const user = await User.findOne({ email });
 
-  if(!user) {
+  if (!user) {
     return res.json({
-      errors: [{
-        msg: "Invalid email"
-      }],
-      data: null
-    })
+      errors: [
+        {
+          msg: "Invalid email",
+        },
+      ],
+      data: null,
+    });
   }
 
+  const isMatch = await bcrypt.compare(password, user.password);
 
-  const isMatch = await bcrypt.compare(password, user.password)
-
-  if(!isMatch) {
+  if (!isMatch) {
     return res.json({
       errors: [
         {
@@ -118,30 +116,45 @@ router.post("/login", async (req, res) => {
     });
   }
 
-    // CREATE  TOKEN
-    const token = await JWT.sign(
-      {email: user.email},
-      process.env.JWT_SECRET as string,
-      {
-        expiresIn: 360000
-      }
-    )
+  // CREATE  TOKEN
+  const token = await JWT.sign(
+    { email: user.email },
+    process.env.JWT_SECRET as string,
+    {
+      expiresIn: 360000,
+    }
+  );
 
-    // SEND THE TOKEN
-    res.json({
-      errors: [],
-      data: {
-        token,
-        user: {
-          id: user._id,
-          email: user.email
-        }
+  // SEND THE TOKEN
+  res.json({
+    errors: [],
+    data: {
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
       },
-      msg: "login successful",
-    });
+    },
+    msg: "login successful",
+  });
+});
 
-})
+// ----------------------
+// GET REQUEST FOR USER DATA
+// -----------------------
+router.get("/user", checkAuth, async (req, res) => {
+  const user = await User.findOne({ email: req.user });
 
-
+  return res.json({
+    errors: [],
+    data: {
+      user: {
+        id: user?._id,
+        email: user?.email,
+        username: user?.username,
+      },
+    },
+  });
+});
 
 export default router;
